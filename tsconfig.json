@@ -11,6 +11,9 @@
     "allowJs": true,
     "noEmit": true,
     "outDir": "dist",
+    "paths": {
+      "@smoothbricks/statebus": ["./src/"]
+    },
     "resolveJsonModule": true
   }
 }
