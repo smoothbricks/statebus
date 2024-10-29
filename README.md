@@ -24,6 +24,8 @@ declare module '@smoothbricks/statebus' {
   interface States {
     // - here a single state key `counter` with a number value
     counter: number;
+    // - here a state indexed by an id
+    post: ByID<{ title: string; body: string }>;
   }
 
   // Topic name(s) and their event types and payloads
@@ -38,7 +40,7 @@ declare module '@smoothbricks/statebus' {
 }
 ```
 
-3. Add the following to your `tsconfig.json`:
+3. Make sure TypeScript loads the declaration. Add it to the `include` or `types` section of your `tsconfig.json`:
 
 ```json
 "types": ["./statebus"]

@@ -1,18 +1,26 @@
-import { atom } from 'signia';
+import { atom } from '@tldraw/state';
 import type {
-  Atom,
+  AnyEventReducer,
+  AnyEventType,
+  AnyTopicReducerMap,
   Event,
-  EventReducers,
   EventTypes,
-  StateBus as IStateBus,
+  StateBusReader,
+  TopLevelReducer,
+  Topics,
+} from './types';
+import type {
+  AnyEvent,
+  AnyTopicListenerMap,
+  AnyTopicReducer,
+  Atom,
   Substates as ISubstates,
   InitialState,
   Listener,
   ReadonlyState,
-  Reducer,
   StateBusConfig,
   StateKeys,
-  Topics,
+  TopicListenerMap,
   WritableState,
 } from './types';
 
@@ -54,32 +62,53 @@ class Substates<T> implements ISubstates<T> {
   }
 }
 
-export class StateBus implements IStateBus {
+export class StateBus implements StateBusReader {
   readonly isolates: Record<string, ReadonlyState> = {};
+  readonly reduceEvent: TopLevelReducer;
   readonly state: ReadonlyState;
   readonly substateInterestCount = new Map<string, number>();
   private initialState: InitialState;
-  private reducers: EventReducers;
 
   constructor(config: StateBusConfig) {
     const { initialState, reducers, autoDispatch = true } = config;
-    this.initialState = initialState;
-    this.reducers = reducers;
-    // When nextFrameId is 0, requestAnimationFrame is scheduled on the next publish()
-    this.nextFrameId = autoDispatch ? 0 : -1;
+    this.initialState = Object.freeze(initialState);
 
+    if (typeof reducers === 'function') {
+      this.reduceEvent = reducers;
+    } else {
+      // Build an object of per-topic reducer functions
+      const topicMap: AnyTopicReducerMap = {};
+      for (const [topicString, reducer] of Object.entries(reducers)) {
+        const topic = topicString as Topics;
+        if (typeof reducer === 'function') {
+          topicMap[topic] = reducer as AnyTopicReducer;
+        } else {
+          const reducerMap = Object.freeze(reducer) as Record<AnyEventType, AnyEventReducer>;
+          // Create a function that dispatches on event type
+          topicMap[topic] = (state, event) => reducerMap[event.type]?.(state, event.payload);
+        }
+      }
+      Object.freeze(topicMap);
+      // Build a single reducer function that dispatches on topic and type
+      this.reduceEvent = (state, event) => topicMap[event.topic]?.(state, event);
+    }
+
+    // Build the state object of Atoms and Substates
     const s = Object.fromEntries(
       Object.entries(this.initialState).map(([key, value]) => [
         key,
-        value instanceof Function ? new Substates(value as any) : atom(`${key}`, value),
+        (value as unknown) instanceof Function ? new Substates(value as unknown as () => void) : atom(`${key}`, value),
       ]),
     );
     this.state = Object.freeze(s) as unknown as ReadonlyState;
+
+    // When nextFrameId is 0, requestAnimationFrame is scheduled on the next publish()
+    this.nextFrameId = autoDispatch ? 0 : -1;
   }
 
-  private eventQueue: Event[] = [];
-  private dispatchingEventQueue: Event[] = [];
-  private listeners: { [Topic in Topics]?: { [Type in EventTypes<Topic>]?: Set<Listener<Topic, Type>> } } = {};
+  private eventQueue: AnyEvent[] = [];
+  private dispatchingEventQueue: AnyEvent[] = [];
+  private listeners: AnyTopicListenerMap = {};
 
   dispatchEvents() {
     let substateInterestEvent: undefined | Event<'statebus', 'substateInterest'>;
@@ -91,9 +120,10 @@ export class StateBus implements IStateBus {
       this.dispatchingEventQueue = eventQueue;
 
       // Reduce all events first, to make sure all state is up to date
+      const writableState = this.state as WritableState;
       for (const event of eventQueue) {
         if (!event) continue;
-        this.reduceEvent(event);
+        this.reduceEvent(writableState, event);
       }
 
       // Dispatch events to listeners, that may read updated state
@@ -103,7 +133,7 @@ export class StateBus implements IStateBus {
         }
         if (!(event.topic === 'statebus' && event.type === 'substateInterest')) {
           this.dispatchEvent(event);
-        } else {
+        } else if (event.type === 'substateInterest') {
           if (substateInterestEvent) Object.assign(substateInterestEvent.payload, event.payload);
           else substateInterestEvent = event;
         }
@@ -117,18 +147,8 @@ export class StateBus implements IStateBus {
     }
   }
 
-  reduceEvent(event: Event) {
-    const reducer = this.reducers[event.topic]?.[event.type] as
-      | Reducer<typeof event.topic, typeof event.type>
-      | undefined;
-
-    if (reducer) reducer(this.state as unknown as WritableState, event);
-  }
-
-  dispatchEvent(event: Event) {
-    const listeners = this.listeners[event.topic]?.[event.type] as
-      | Set<Listener<typeof event.topic, typeof event.type>>
-      | undefined;
+  dispatchEvent(event: AnyEvent) {
+    const listeners = this.listeners[event.topic]?.[event.type];
 
     if (listeners) {
       for (const listener of listeners) {
@@ -148,10 +168,10 @@ export class StateBus implements IStateBus {
 
   private nextFrameId: number;
 
-  publish(event: Event) {
+  publish(event: AnyEvent) {
     if (this.nextFrameId === 0) {
       this.nextFrameId = requestAnimationFrame((time) => {
-        console.trace('Dispatching events post-render', time);
+        // console.trace('Dispatching events post-render', time);
         this.dispatchEvents();
         this.nextFrameId = 0;
       });
@@ -164,7 +184,7 @@ export class StateBus implements IStateBus {
     type: Type,
     listener: Listener<Topic, Type>,
   ): () => void {
-    let topicListeners = this.listeners[topic];
+    let topicListeners = (this.listeners as TopicListenerMap<Topic, Type>)[topic];
     if (!topicListeners) this.listeners[topic] = topicListeners = {};
 
     const typeListeners = topicListeners[type];
@@ -180,7 +200,7 @@ export class StateBus implements IStateBus {
   substateInterest<SK extends StateKeys>(keys: SK[]): () => void {
     if (keys.length === 0) return () => {};
 
-    const subscribers: Record<SK, number> = {} as any;
+    const subscribers = {} as Record<SK, number>;
     for (const key of keys) {
       const count = (this.substateInterestCount.get(key) ?? 0) + 1;
       subscribers[key] = count;
@@ -191,7 +211,7 @@ export class StateBus implements IStateBus {
     this.publish({ topic: 'statebus', type: 'substateInterest', payload: { subscribers } });
 
     return () => {
-      const subscribers: Record<SK, number> = {} as any;
+      const subscribers = {} as Record<SK, number>;
       for (const key of keys) {
         const count = (this.substateInterestCount.get(key) ?? 1) - 1;
         if (count > 0) this.substateInterestCount.set(key, count);

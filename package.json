@@ -1,24 +1,34 @@
 {
   "name": "@smoothbricks/statebus",
-  "type": "module",
   "version": "0.9.0",
+  "author": "Robert Soriano <sorianorobertc@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/smoothbricks/statebus.git"
+  },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "description": "",
+  "dependencies": {
+    "@tldraw/state": "^3.4.0",
+    "@tldraw/state-react": "^3.4.0",
+    "react": "18.3.1"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.0.1",
+    "@testing-library/user-event": "^14.0.0",
+    "@types/bun": "^1.1.12",
+    "@types/react": "^18.3.12",
+    "bun-plugin-dts": "^0.3.0"
+  },
   "exports": {
     "types": "./dist/index.d.ts",
     "import": "./dist/index.js",
     "require": "./dist/index.cjs"
   },
-  "scripts": {
-    "build": "bun run build.ts",
-    "lint": "biome check --files-ignore-unknown=true",
-    "lint:fix": "biome format --write --files-ignore-unknown=true",
-    "prepublishOnly": "bun run build",
-    "upgrade-interactive": "bunx npm-check-updates -i"
-  },
+  "bugs": "https://github.com/smoothbricks/statebus/issues",
+  "description": "",
   "files": ["dist"],
+  "homepage": "https://smoothbricks.dev/statebus",
   "keywords": [
     "data flow",
     "event bus",
@@ -43,22 +53,13 @@
     "copy-on-write"
   ],
   "license": "MIT",
-  "homepage": "https://smoothbricks.dev/statebus",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/smoothbricks/statebus.git"
+  "scripts": {
+    "build": "bun run build.ts",
+    "lint": "biome check --files-ignore-unknown=true",
+    "lint:fix": "biome format --write --files-ignore-unknown=true",
+    "prepublishOnly": "bun run build",
+    "upgrade-interactive": "bunx npm-check-updates -i"
   },
-  "bugs": "https://github.com/smoothbricks/statebus/issues",
-  "author": "Robert Soriano <sorianorobertc@gmail.com>",
-  "devDependencies": {
-    "@types/bun": "^1.1.12",
-    "@types/react": "^18.3.12",
-    "bun-plugin-dts": "^0.3.0"
-  },
-  "dependencies": {
-    "signia": "^0.1.5"
-  },
-  "optionalDependencies": {
-    "react": "^18.3.1"
-  }
+  "type": "module",
+  "types": "./dist/index.d.ts"
 }

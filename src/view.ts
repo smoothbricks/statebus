@@ -1,32 +1,38 @@
-import { computed as computedSignal } from 'signia';
+import { computed as computedSignal } from '@tldraw/state';
 
-import type { ReadonlyState, StateBus, StateKeys } from './types';
+import type { ReadonlyState, StateBusReader, StateKeys } from './types';
 
-export type ViewProps = never | undefined | null | string | number | Record<string, string | number | boolean | null>;
+export type ViewPrimitiveProp = undefined | null | string | number;
+
+export type ViewProps = never | ViewPrimitiveProp | Record<string, ViewPrimitiveProp>;
 export type ViewFunction<SK extends StateKeys, Props extends ViewProps, R> = (
   states: Pick<ReadonlyState, SK>,
   props: Props,
 ) => R;
 
+export function sortedKeyValuePairs(props: Record<string, ViewPrimitiveProp>): [string, ViewPrimitiveProp][] {
+  return Object.entries(props).sort(([k1], [k2]) => k1.localeCompare(k2));
+}
+
+export function computedPropsString(props: ViewProps): string {
+  if (props === undefined || props === null) {
+    return '';
+  }
+  if (typeof props === 'string' || typeof props === 'number') {
+    return props.toString();
+  }
+  return sortedKeyValuePairs(props)
+    .map(([k, v]) => `${k}=${v?.toString()}`)
+    .join(',');
+}
+
 export function computed<SK extends StateKeys, Props extends ViewProps, R>(
-  statebus: StateBus,
+  statebus: StateBusReader,
   viewId: string,
   hook: ViewFunction<SK, Props, R>,
   props: Props,
 ) {
   // Make a unique name for the computed signal based on the viewId and props
-  let params: string;
-  if (props) {
-    params = ':';
-    if (typeof props === 'string' || typeof props === 'number') {
-      params += props;
-    } else {
-      params += Object.entries(props)
-        .map(([k, v]) => `${k}=${v?.toString()}`)
-        .join(',');
-    }
-  } else {
-    params = '';
-  }
-  return computedSignal(`${viewId}${params}`, () => hook(statebus.state, props));
+  const name = `${viewId}${props ? `:${computedPropsString(props)}` : ''}`;
+  return computedSignal(name, () => hook(statebus.state, props));
 }
